@@ -145,21 +145,37 @@ input.addEventListener('keydown', (e) => {
         let value = e.target.value;
         let keys = value.split(' ');
         if (keys[0] == 'add' && keys.length > 2) {
-            // 批量添加股票
-            for (let i = 1; i < keys.length; i += 2) {
-                if (keys[i + 1]) { // 确保有对应的代码
-                    names.push(keys[i]);
-                    codes.push(keys[i + 1]);
-                    getStockData(true, keys[i + 1]);
+            let isHeld = keys[keys.length - 1] === 'h'; // 检查最后一个参数是否是 'h'
+            for (let i = 1; i < keys.length - (isHeld ? 1 : 0); i += 2) {
+                let name = keys[i];
+                let code = keys[i + 1];
+                if (name && code) {
+                    let index = codes.indexOf(code);
+                    if (index === -1) {
+                        // 如果股票不在列表中，添加股票
+                        names.push(name);
+                        codes.push(code);
+                        if (isHeld) {
+                            localStorage.setItem(code + '_held', 'true'); // 标记为持仓股票
+                        }
+                        getStockData(true, code);
+                    } else if (isHeld) {
+                        // 如果股票已在列表中，且本次是持仓股票，则标记为高亮
+                        localStorage.setItem(code + '_held', 'true');
+                        updateStockRowHighlight(code); // 更新高亮状态
+                    }
                 }
             }
+            sortTableByHeldStatus(); // 按持仓状态排序
         } else if (keys[0] == 'remove' && keys.length > 1) {
             let index = names.indexOf(keys[1]);
-            names.splice(index, 1);
-            codes.splice(index, 1);
-            let table = document.getElementById('table');
-            table.removeChild(table.childNodes[index + 2]);
-            getStockData(false, codes.join(','));
+            if (index !== -1) {
+                names.splice(index, 1);
+                codes.splice(index, 1);
+                let table = document.getElementById('table');
+                table.removeChild(table.childNodes[index + 2]);
+                getStockData(false, codes.join(','));
+            }
         } else if (keys[0] == 'clear') {
             names = [];
             codes = [];
@@ -175,7 +191,32 @@ input.addEventListener('keydown', (e) => {
         localStorage.setItem('names', names.join(','));
         e.target.value = '';
     }
-})
+});
+
+function updateStockRowHighlight(symbol) {
+    let tr = document.querySelector(`#table tr td[id^="${symbol}"]`).parentNode;
+    if (localStorage.getItem(symbol + '_held') === 'true') {
+        tr.classList.add('held-stock'); // 添加高亮样式
+    } else {
+        tr.classList.remove('held-stock'); // 移除高亮样式
+    }
+}
+
+function sortTableByHeldStatus() {
+    let table = document.getElementById('table');
+    let rows = Array.from(table.querySelectorAll('tr')).slice(1); // 跳过表头
+    let heldRows = rows.filter(row => row.classList.contains('held-stock'));
+    let nonHeldRows = rows.filter(row => !row.classList.contains('held-stock'));
+
+    // 清空表格
+    while (table.rows.length > 1) {
+        table.deleteRow(1);
+    }
+
+    // 先添加高亮行，再添加非高亮行
+    heldRows.forEach(row => table.appendChild(row));
+    nonHeldRows.forEach(row => table.appendChild(row));
+}
 
 // 创建股票行
 function createStockTr(stock) {
@@ -197,6 +238,11 @@ function createStockTr(stock) {
     tdSymbol.setAttribute('class', 'tdStart');
     tdCurrent.setAttribute('class', 'tdCenter');
     tdPercent.setAttribute('class', 'tdCenter');
+
+    // 检查是否是持仓股票
+    if (localStorage.getItem(symbol + '_held') === 'true') {
+        tr.classList.add('held-stock'); // 添加高亮样式
+    }
 
     tr.appendChild(tdSymbol);
     tr.appendChild(tdPercent);
