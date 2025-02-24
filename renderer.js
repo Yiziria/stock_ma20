@@ -13,16 +13,15 @@ if(codes.length > 0 && names.length > 0){
     getStockData(true, codes.join(','));
 }
 
-// 从localStorage中获取数据
-function getStorageData(key){
+function getStorageData(key) {
     let data = localStorage.getItem(key);
-    console.log(data)
-    if(data  == null || data == ''){
-        return []
-    }else{
-        return data.split(',')
+    if (data === null || data === '') {
+        return [];
+    } else {
+        return data.split(',');
     }
 }
+
 
 // 存储当前值等于MA20的股票信息
 let alertedStocks = new Set(); // 使用Set来存储已提醒的股票
@@ -30,23 +29,47 @@ let alertMessages = []; // 存储待提醒的股票信息
 
 // 更新股票数据
 function updateStockData(stock) {
-    let symbol = stock['symbol'];
-    let tdCurrent = document.getElementById(symbol + 'current');
-    let tdPercent = document.getElementById(symbol + 'percent');
-    let tdMA20 = document.getElementById(symbol + 'ma20'); // 获取MA20单元格
+    let symbol = stock['symbol']; // 获取股票代码
+    let tr = document.querySelector(`#table tr td[id^="${symbol}"]`).parentNode; // 获取对应的表格行
+    if (!tr) {
+        tr = createStockTr(stock); // 如果行不存在，创建新行
+    }
 
-    tdCurrent.innerHTML = stock['current'];
-    tdPercent.innerHTML = stock['percent'] + '%';
-    
-    // 直接将MA20的值更新到tdMA20
-    if (tdMA20) {
-        tdMA20.innerHTML = tdMA20.innerHTML; // 这里可以根据需要更新MA20的值
-        
-        // 检查tdCurrent是否等于tdMA20，并记录符合条件的股票
-        if (tdCurrent.innerHTML === tdMA20.innerHTML && !alertedStocks.has(symbol)) {
-            let stockName = names[codes.indexOf(symbol)]; // 获取股票名称
-            alertMessages.push(`${stockName} 的当前值与MA20值相等！`);
-            alertedStocks.add(symbol); // 标记为已提醒
+    // 获取对应的单元格
+    let tdCurrent = tr.querySelector(`td#${symbol}current`);
+    let tdPercent = tr.querySelector(`td#${symbol}percent`);
+    let tdMA20_30 = tr.querySelector(`td#${symbol}ma20_30`);
+    let tdMA20_60 = tr.querySelector(`td#${symbol}ma20_60`);
+    let tdMA20_120 = tr.querySelector(`td#${symbol}ma20_120`);
+
+    // 确保股票数据存在
+    if (stock) {
+        // 更新单元格内容，若数据不存在则显示'N/A'
+        tdCurrent.innerHTML = stock['current'] !== undefined ? stock['current'] : 'N/A';
+        tdPercent.innerHTML = stock['percent'] !== undefined ? stock['percent'] + '%' : 'N/A';
+        tdMA20_30.innerHTML = stock['ma20_30'] !== undefined ? stock['ma20_30'] : 'N/A';
+        tdMA20_60.innerHTML = stock['ma20_60'] !== undefined ? stock['ma20_60'] : 'N/A';
+        tdMA20_120.innerHTML = stock['ma20_120'] !== undefined ? stock['ma20_120'] : 'N/A';
+
+        // 检查当前股价是否触达MA20并添加提醒
+        checkForAlerts(stock['current'], stock['ma20_30'], stock['ma20_60'], stock['ma20_120'], symbol);
+    }
+}
+
+// 检查是否触达MA20并添加提醒
+function checkForAlerts(currentPrice, ma20_30, ma20_60, ma20_120, symbol) {
+    if (currentPrice !== undefined) {
+        // 检查30分钟MA20
+        if (ma20_30 !== undefined && (currentPrice >= ma20_30 * 0.99 && currentPrice <= ma20_30 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达30分钟MA20: ${ma20_30}`); // 提醒用户
+        }
+        // 检查60分钟MA20
+        if (ma20_60 !== undefined && (currentPrice >= ma20_60 * 0.99 && currentPrice <= ma20_60 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达60分钟MA20: ${ma20_60}`); // 提醒用户
+        }
+        // 检查120分钟MA20
+        if (ma20_120 !== undefined && (currentPrice >= ma20_120 * 0.99 && currentPrice <= ma20_120 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达120分钟MA20: ${ma20_120}`); // 提醒用户
         }
     }
 }
@@ -59,11 +82,58 @@ function checkAndShowAlerts() {
     }
 }
 
-// 每次获取股票数据后调用checkAndShowAlerts
-setInterval(() => {
+// 定义计算MA20的时间间隔（以毫秒为单位）
+const interval = 30 * 60 * 1000; // 30分钟
+const tradingHours = {
+    morning: { start: '09:30', end: '11:30' },
+    afternoon: { start: '13:00', end: '15:00' }
+};
+
+// 检查当前时间是否在交易时间内
+function isMarketOpen() {
+    const now = new Date();
+    const currentDay = now.getDay(); // 0: 星期日, 1: 星期一, ..., 6: 星期六
+    const currentTime = now.toTimeString().slice(0, 5); // 获取当前时间 HH:MM
+
+    // 检查是否是工作日
+    if (currentDay === 0 || currentDay === 6) {
+        return false; // 周末不交易
+    }
+
+    // 检查是否在上午或下午的交易时间内
+    return (currentTime >= tradingHours.morning.start && currentTime <= tradingHours.morning.end) ||
+           (currentTime >= tradingHours.afternoon.start && currentTime <= tradingHours.afternoon.end);
+}
+
+// 计算MA20值
+function calculateMA20ForAll() {
     if (codes.length > 0) {
-        getStockData(false, codes.join(','));
-        checkAndShowAlerts(); // 检查并展示弹窗
+        codes.forEach(symbol => {
+            calculateAndUpdateMA20(symbol); // 计算并更新MA20
+        });
+    }
+}
+
+// 启动时立即计算一次MA20
+calculateMA20ForAll();
+
+// 启动时设置第一个计算时间
+function startMA20Calculation() {
+    // 每隔30分钟计算MA20
+    setInterval(() => {
+        if (isMarketOpen()) {
+            calculateMA20ForAll(); // 在交易时间内计算MA20
+        }
+    }, interval);
+}
+
+// 启动计算
+startMA20Calculation();
+
+// 每3秒获取股票数据（如果需要）
+setInterval(() => {
+    if (isMarketOpen() && codes.length > 0) {
+        getStockData(false, codes.join(',')); // 获取股票数据
     }
 }, 3000);
 
@@ -71,68 +141,89 @@ setInterval(() => {
 function getStockData(needCreate, symbols) {
     fetch('https://stock.xueqiu.com/v5/stock/realtime/quotec.json?symbol=' + symbols)
         .then((response) => {
-            response.json().then((json) => {
-                let length = json.data.length;
-                for (let i = 0; i < length; i++) {
-                    const stock = json.data[i];
-                    if (needCreate) {
-                        createStockTr(stock)
-                    }
-                    updateStockData(stock)
-                    // 计算并更新MA20值
-                    calculateAndUpdateMA20(stock.symbol);
-                }
-            })
-        })
-}
-
-function getCloseValues(symbol, scale, ma, datalen) {
-    const url = `https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=${scale}&ma=${ma}&datalen=${datalen}`;
-
-    return fetch(url)
-        .then(response => {
             if (!response.ok) {
-                throw new Error('请求失败');
+                throw new Error('网络响应不正常');
             }
             return response.json();
         })
-        .then(klineData => {
-            return klineData.map(item => parseFloat(item.close));
+        .then((json) => {
+            let length = json.data.length;
+            for (let i = 0; i < length; i++) {
+                const stock = json.data[i];
+                if (needCreate) {
+                    createStockTr(stock);
+                }
+                updateStockData(stock);
+                // 计算并更新MA20值
+                calculateAndUpdateMA20(stock.symbol);
+            }
         })
-        .catch(error => {
-            console.error('请求失败:', error);
-            return [];
+        .catch((error) => {
+            console.error('获取股票数据失败:', error);
         });
 }
 
-function calculateMA20(closeValues) {
-    if (closeValues.length < 20) {
-        console.log("数据不足以计算 MA20");
-        return null;
-    }
 
-    const ma20 = closeValues.reduce((sum, value) => sum + value, 0) / closeValues.length;
-    return Math.round(ma20 * 100) / 100;
+
+function getCloseValues(symbol, scales, ma, datalen) {
+    const promises = scales.map(scale => {
+        const url = `https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=${scale}&ma=${ma}&datalen=${datalen}`;
+        return fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('请求失败');
+                }
+                return response.json();
+            })
+            .then(klineData => {
+                return klineData.map(item => parseFloat(item.close));
+            })
+            .catch(error => {
+                console.error(`请求失败（scale=${scale}）:`, error);
+                return [];
+            });
+    });
+
+    return Promise.all(promises);
 }
 
-// 计算并更新MA20值
+function calculateMA20(closeValuesList) {
+    const ma20List = closeValuesList.map(closeValues => {
+        if (closeValues.length < 20) {
+            console.log("数据不足以计算 MA20");
+            return null;
+        }
+        const ma20 = closeValues.reduce((sum, value) => sum + value, 0) / closeValues.length;
+        return Math.round(ma20 * 100) / 100;
+    });
+    return ma20List;
+}
+
 function calculateAndUpdateMA20(symbol) {
-    const scale = 30;
+    const scales = [30, 60, 120]; // 需要获取的scale值
     const ma = "no";
     const datalen = 20;
 
-    getCloseValues(symbol, scale, ma, datalen)
-        .then(closeValues => {
-            if (closeValues.length > 0) {
-                console.log("收盘价格列表:", closeValues);
-                const ma20 = calculateMA20(closeValues);
-                if (ma20 !== null) {
-                    console.log("MA20 值:", ma20);
-                    // 更新表格中的MA20值
-                    updateMA20InTable(symbol, ma20);
-                }
-            }
+    getCloseValues(symbol, scales, ma, datalen)
+        .then(closeValuesList => {
+            const ma20List = calculateMA20(closeValuesList);
+            console.log("MA20 值列表:", ma20List);
+            updateMA20InTable(symbol, ma20List);
         });
+}
+
+// 更新表格中的MA20值
+function updateMA20InTable(symbol, ma20List) {
+    const scales = [30, 60, 120];
+    ma20List.forEach((ma20, index) => {
+        if (ma20 !== null) {
+            const scale = scales[index];
+            const tdMA20 = document.getElementById(`${symbol}ma20_${scale}`);
+            if (tdMA20) { // 确保tdMA20存在
+                tdMA20.innerHTML = ma20; // 更新MA20值
+            }
+        }
+    });
 }
 
 // 获取输入框元素
@@ -218,52 +309,46 @@ function sortTableByHeldStatus() {
     nonHeldRows.forEach(row => table.appendChild(row));
 }
 
-// 创建股票行
 function createStockTr(stock) {
     let symbol = stock['symbol'];
     let index = codes.indexOf(symbol);
     let stockName = names[index];
     let tr = document.createElement('tr');
+
     let tdSymbol = document.createElement('td');
-    let tdCurrent = document.createElement('td');
-    let tdPercent = document.createElement('td');
-    let tdMA20 = document.createElement('td'); // 直接使用MA20单元格
-
     tdSymbol.innerHTML = stockName;
+    tdSymbol.className = 'tdStart';
+
+    let tdCurrent = document.createElement('td');
     tdCurrent.setAttribute('id', symbol + 'current');
+    tdCurrent.className = 'tdCenter';
+
+    let tdPercent = document.createElement('td');
     tdPercent.setAttribute('id', symbol + 'percent');
-    tdMA20.setAttribute('id', symbol + 'ma20'); // 设置ID
+    tdPercent.className = 'tdCenter';
 
-    tdMA20.setAttribute('class', 'tdEnd'); // 设置样式类为tdEnd
-    tdSymbol.setAttribute('class', 'tdStart');
-    tdCurrent.setAttribute('class', 'tdCenter');
-    tdPercent.setAttribute('class', 'tdCenter');
+    // 创建MA20单元格
+    let tdMA20_30 = document.createElement('td');
+    tdMA20_30.setAttribute('id', symbol + 'ma20_30');
+    tdMA20_30.className = 'tdEnd';
 
-    // 检查是否是持仓股票
-    if (localStorage.getItem(symbol + '_held') === 'true') {
-        tr.classList.add('held-stock'); // 添加高亮样式
-    }
+    let tdMA20_60 = document.createElement('td');
+    tdMA20_60.setAttribute('id', symbol + 'ma20_60');
+    tdMA20_60.className = 'tdEnd';
+
+    let tdMA20_120 = document.createElement('td');
+    tdMA20_120.setAttribute('id', symbol + 'ma20_120');
+    tdMA20_120.className = 'tdEnd';
 
     tr.appendChild(tdSymbol);
-    tr.appendChild(tdPercent);
     tr.appendChild(tdCurrent);
-    tr.appendChild(tdMA20); // 将MA20单元格添加到表格行中
+    tr.appendChild(tdPercent);
+    tr.appendChild(tdMA20_30); // 添加MA20_30单元格
+    tr.appendChild(tdMA20_60);  // 添加MA20_60单元格
+    tr.appendChild(tdMA20_120); // 添加MA20_120单元格
 
     document.getElementById('table').appendChild(tr);
-}
-
-// 新增函数：更新表格中的MA20值
-function updateMA20InTable(symbol, ma20) {
-    let tdMA20 = document.getElementById(symbol + 'ma20');
-    if (!tdMA20) {
-        // 如果单元格不存在，则找到对应的行并创建一个新的单元格
-        let row = document.querySelector(`#table tr td[id^="${symbol}"]`).parentNode; // 找到对应symbol的行
-        tdMA20 = document.createElement('td');
-        tdMA20.setAttribute('id', symbol + 'ma20');
-        row.appendChild(tdMA20); // 将MA20单元格添加到对应行
-    }
-    // 更新MA20值
-    tdMA20.innerHTML = ma20;
+    return tr;
 }
 
 // 初始化界面边界

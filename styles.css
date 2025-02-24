@@ -1,34 +1,47 @@
-body { 
+body {
     background: #333;
-     color: white; 
+    color: white;
+    font-size: 12px; /* 设置body的字体大小 */
 }
 
-table{
+table {
     width: 100%;
-    font-size: small;
+    font-size: 10px; /* 将表格的字体大小设置为10px */
 }
 
+#table {
+    table-layout: fixed;
+    width: 100%;
+}
 
+.tdStart, .tdCenter, .tdEnd {
+    width: 16%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 8px 4px;
+    font-size: 9px; /* 将表格单元格的字体大小设置为9px */
+}
 
-td{
+td {
     width: 25%;
 }
 
-.tdCenter{
+.tdCenter {
     text-align: center;
 }
 
-.tdStart{
+.tdStart {
     text-align: start;
 }
 
-.tdEnd{
+.tdEnd {
     text-align: end;
 }
 
- input{
-    outline-style: none ;
-    border: 0.8px solid grey; 
+input {
+    outline-style: none;
+    border: 0.8px solid grey;
     border-radius: 25px;
     padding-left: 10px;
     background-color: #333;
@@ -39,17 +52,20 @@ td{
     left: 10px;
     right: 10px;
     visibility: hidden;
+    font-size: 12px; /* 设置输入框的字体大小 */
 }
-
 
 /* 高亮股票样式 */
 .held-stock {
-    font-weight: bold; /* 加粗字体 */
-    border: none; /* 移除边框 */
-    color: rgb(233, 121, 106); /* 字体颜色为红色 */
+    font-weight: bold;
+    border: none;
+    color: rgb(233, 121, 106);
+    font-size: 9px; /* 设置高亮股票的字体大小 */
 }
 
 /* 移除高亮股票的边框 */
 .held-stock td {
-    border: none; /* 移除单元格边框 */
+    border: none;
 }
+
+
