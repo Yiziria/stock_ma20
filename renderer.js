@@ -22,7 +22,6 @@ function getStorageData(key) {
     }
 }
 
-
 // 存储当前值等于MA20的股票信息
 let alertedStocks = new Set(); // 使用Set来存储已提醒的股票
 let alertMessages = []; // 存储待提醒的股票信息
@@ -47,9 +46,17 @@ function updateStockData(stock) {
         // 更新单元格内容，若数据不存在则显示'N/A'
         tdCurrent.innerHTML = stock['current'] !== undefined ? stock['current'] : 'N/A';
         tdPercent.innerHTML = stock['percent'] !== undefined ? stock['percent'] + '%' : 'N/A';
-        tdMA20_30.innerHTML = stock['ma20_30'] !== undefined ? stock['ma20_30'] : 'N/A';
-        tdMA20_60.innerHTML = stock['ma20_60'] !== undefined ? stock['ma20_60'] : 'N/A';
-        tdMA20_120.innerHTML = stock['ma20_120'] !== undefined ? stock['ma20_120'] : 'N/A';
+        
+        // 保留两位小数
+        if (stock['ma20_30'] !== undefined) {
+            tdMA20_30.innerHTML = Number(stock['ma20_30']).toFixed(2);
+        }
+        if (stock['ma20_60'] !== undefined) {
+            tdMA20_60.innerHTML = Number(stock['ma20_60']).toFixed(2);
+        }
+        if (stock['ma20_120'] !== undefined) {
+            tdMA20_120.innerHTML = Number(stock['ma20_120']).toFixed(2);
+        }
 
         // 检查当前股价是否触达MA20并添加提醒
         checkForAlerts(stock['current'], stock['ma20_30'], stock['ma20_60'], stock['ma20_120'], symbol);
@@ -163,8 +170,6 @@ function getStockData(needCreate, symbols) {
         });
 }
 
-
-
 function getCloseValues(symbol, scales, ma, datalen) {
     const promises = scales.map(scale => {
         const url = `https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=${scale}&ma=${ma}&datalen=${datalen}`;
@@ -193,34 +198,40 @@ function calculateMA20(closeValuesList) {
             console.log("数据不足以计算 MA20");
             return null;
         }
-        const ma20 = closeValues.reduce((sum, value) => sum + value, 0) / closeValues.length;
-        return Math.round(ma20 * 100) / 100;
+        const sum = closeValues.reduce((acc, val) => acc + val, 0);
+        const ma20 = sum / 20;
+        return Math.round(ma20 * 100) / 100; // 保留两位小数
     });
     return ma20List;
 }
 
 function calculateAndUpdateMA20(symbol) {
-    const scales = [30, 60, 120]; // 需要获取的scale值
+    const scales = [30, 60, 120];
     const ma = "no";
     const datalen = 20;
 
     getCloseValues(symbol, scales, ma, datalen)
         .then(closeValuesList => {
             const ma20List = calculateMA20(closeValuesList);
-            console.log("MA20 值列表:", ma20List);
             updateMA20InTable(symbol, ma20List);
         });
 }
 
-// 更新表格中的MA20值
+// 更新表格中的MA20值（优化后）
 function updateMA20InTable(symbol, ma20List) {
     const scales = [30, 60, 120];
     ma20List.forEach((ma20, index) => {
         if (ma20 !== null) {
             const scale = scales[index];
             const tdMA20 = document.getElementById(`${symbol}ma20_${scale}`);
-            if (tdMA20) { // 确保tdMA20存在
-                tdMA20.innerHTML = ma20; // 更新MA20值
+            if (tdMA20) {
+                const currentValue = parseFloat(tdMA20.innerHTML) || null;
+                const newValue = parseFloat(ma20.toFixed(2));
+                
+                // 只有当新值与当前值不同时才更新
+                if (currentValue === null || newValue !== currentValue) {
+                    tdMA20.innerHTML = newValue.toFixed(2);
+                }
             }
         }
     });
