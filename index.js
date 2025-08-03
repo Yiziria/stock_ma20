@@ -19,7 +19,7 @@ const createWindow = () => {
   
     win.loadFile('index.html')
     //打开开发者工具
-   //win.openDevTools();
+    // win.webContents.openDevTools()
 
    win.on('resized',(e) =>{
 

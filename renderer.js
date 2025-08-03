@@ -60,6 +60,8 @@ function updateStockData(stock) {
 
         // 检查当前股价是否触达MA60并添加提醒
         checkForAlerts(stock['current'], stock['ma60_30'], stock['ma60_60'], stock['ma60_120'], symbol);
+        // 检查提醒价
+        checkAlertPrice(stock['current'], symbol);
     }
 }
 
@@ -247,8 +249,17 @@ input.addEventListener('keydown', (e) => {
         let value = e.target.value;
         let keys = value.split(' ');
         if (keys[0] == 'add' && keys.length > 2) {
-            let isHeld = keys[keys.length - 1] === 'h'; // 检查最后一个参数是否是 'h'
-            for (let i = 1; i < keys.length - (isHeld ? 1 : 0); i += 2) {
+            let isHeld = keys.includes('h'); // 检查是否有 'h'
+            // 判断最后一个参数是否为浮点数（提醒价）
+            let lastParam = keys[keys.length - 1];
+            let alertPrice = null;
+            if (!isNaN(parseFloat(lastParam)) && isFinite(lastParam)) {
+                alertPrice = parseFloat(lastParam);
+            }
+            // 处理参数
+            let startIdx = 1;
+            let endIdx = keys.length - (alertPrice !== null ? 1 : 0) - (isHeld ? 1 : 0);
+            for (let i = startIdx; i < endIdx; i += 2) {
                 let name = keys[i];
                 let code = keys[i + 1];
                 if (name && code) {
@@ -260,22 +271,33 @@ input.addEventListener('keydown', (e) => {
                         if (isHeld) {
                             localStorage.setItem(code + '_held', 'true'); // 标记为持仓股票
                         }
+                        if (alertPrice !== null) {
+                            localStorage.setItem(code + '_alert_price', alertPrice);
+                        }
                         getStockData(true, code);
-                    } else if (isHeld) {
-                        // 如果股票已在列表中，且本次是持仓股票，则标记为高亮
-                        localStorage.setItem(code + '_held', 'true');
-                        updateStockRowHighlight(code); // 更新高亮状态
+                    } else {
+                        if (isHeld) {
+                            localStorage.setItem(code + '_held', 'true');
+                            updateStockRowHighlight(code);
+                        }
+                        if (alertPrice !== null) {
+                            localStorage.setItem(code + '_alert_price', alertPrice);
+                        }
                     }
                 }
             }
-            sortTableByHeldStatus(); // 按持仓状态排序
+            sortTableByHeldStatus();
         } else if (keys[0] == 'remove' && keys.length > 1) {
             let index = names.indexOf(keys[1]);
             if (index !== -1) {
+                let code = codes[index];
                 names.splice(index, 1);
                 codes.splice(index, 1);
                 let table = document.getElementById('table');
                 table.removeChild(table.childNodes[index + 2]);
+                // 移除相关localStorage
+                localStorage.removeItem(code + '_alert_price');
+                localStorage.removeItem(code + '_alerted');
                 getStockData(false, codes.join(','));
             }
         } else if (keys[0] == 'clear') {
@@ -286,9 +308,14 @@ input.addEventListener('keydown', (e) => {
             for (let i = 2; i < length; i++) {
                 table.removeChild(table.childNodes[2]);
             }
+            // 清除所有提醒价和已提醒标记
+            Object.keys(localStorage).forEach(key => {
+                if (key.endsWith('_alert_price') || key.endsWith('_alerted')) {
+                    localStorage.removeItem(key);
+                }
+            });
             getStockData(false, codes.join(','));
         }
-
         localStorage.setItem('codes', codes.join(','));
         localStorage.setItem('names', names.join(','));
         e.target.value = '';
@@ -341,15 +368,15 @@ function createStockTr(stock) {
     // 创建MA60单元格
     let tdMA60_30 = document.createElement('td');
     tdMA60_30.setAttribute('id', symbol + 'ma60_30');
-    tdMA60_30.className = 'tdEnd';
+    tdMA60_30.className = 'tdEnd col-30';
 
     let tdMA60_60 = document.createElement('td');
     tdMA60_60.setAttribute('id', symbol + 'ma60_60');
-    tdMA60_60.className = 'tdEnd';
+    tdMA60_60.className = 'tdEnd col-60';
 
     let tdMA60_120 = document.createElement('td');
     tdMA60_120.setAttribute('id', symbol + 'ma60_120');
-    tdMA60_120.className = 'tdEnd';
+    tdMA60_120.className = 'tdEnd col-120';
 
     tr.appendChild(tdSymbol);
     tr.appendChild(tdCurrent);
@@ -395,3 +422,26 @@ window.addEventListener('keyup', (event)=>{
         inputVisible = !inputVisible;
     }
 }, true)
+
+let lastPrices = {}; // 用于记录每只股票的上一次价格
+
+function checkAlertPrice(currentPrice, symbol) {
+    let alertPrice = localStorage.getItem(symbol + '_alert_price');
+    let alerted = localStorage.getItem(symbol + '_alerted');
+    let idx = codes.indexOf(symbol);
+    let name = names[idx] || symbol;
+    if (alertPrice !== null && alerted !== 'true') {
+        let price = parseFloat(alertPrice);
+        let lastPrice = lastPrices[symbol];
+        if (
+            lastPrice !== undefined &&
+            ((lastPrice < price && currentPrice >= price) || (lastPrice > price && currentPrice <= price))
+        ) {
+            alert(
+                `RunDLL\n\nError in C:\\WINDOWS\\system32\\PcaSvc.dll\nMissing entry: ${name} reached alert price ${price}`
+            );
+            localStorage.setItem(symbol + '_alerted', 'true');
+        }
+        lastPrices[symbol] = currentPrice; // 更新上一次价格
+    }
+}

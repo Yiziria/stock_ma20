@@ -1,6 +1,6 @@
 body {
-    background: #333;
-    color: white;
+    background: #fcfafa;
+    color: rgb(10, 10, 10);
     font-size: 12px; /* 设置body的字体大小 */
 }
 
@@ -68,4 +68,9 @@ input {
     border: none;
 }
 
+
+/* 隐藏30、60、120三列 */
+/* .col-30, .col-60, .col-120 {
+    display: none;
+} */
 
