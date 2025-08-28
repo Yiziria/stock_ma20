@@ -37,9 +37,9 @@ function updateStockData(stock) {
     // 获取对应的单元格
     let tdCurrent = tr.querySelector(`td#${symbol}current`);
     let tdPercent = tr.querySelector(`td#${symbol}percent`);
-    let tdMA60_30 = tr.querySelector(`td#${symbol}ma60_30`);
-    let tdMA60_60 = tr.querySelector(`td#${symbol}ma60_60`);
-    let tdMA60_120 = tr.querySelector(`td#${symbol}ma60_120`);
+    let tdMA10 = tr.querySelector(`td#${symbol}ma10`);
+    let tdMA20 = tr.querySelector(`td#${symbol}ma20`);
+    let tdMA60 = tr.querySelector(`td#${symbol}ma60`);
 
     // 确保股票数据存在
     if (stock) {
@@ -47,38 +47,38 @@ function updateStockData(stock) {
         tdCurrent.innerHTML = stock['current'] !== undefined ? stock['current'] : 'N/A';
         tdPercent.innerHTML = stock['percent'] !== undefined ? stock['percent'] + '%' : 'N/A';
         
-        // 保留两位小数
-        if (stock['ma60_30'] !== undefined) {
-            tdMA60_30.innerHTML = Number(stock['ma60_30']).toFixed(2);
-        }
-        if (stock['ma60_60'] !== undefined) {
-            tdMA60_60.innerHTML = Number(stock['ma60_60']).toFixed(2);
-        }
-        if (stock['ma60_120'] !== undefined) {
-            tdMA60_120.innerHTML = Number(stock['ma60_120']).toFixed(2);
-        }
+        // 保留两位小数（不再使用雪球ma覆盖我们计算的均线）
+        // if (stock['ma10'] !== undefined) {
+        //     tdMA10.innerHTML = Number(stock['ma10']).toFixed(2);
+        // }
+        // if (stock['ma20'] !== undefined) {
+        //     tdMA20.innerHTML = Number(stock['ma20']).toFixed(2);
+        // }
+        // if (stock['ma60'] !== undefined) {
+        //     tdMA60.innerHTML = Number(stock['ma60']).toFixed(2);
+        // }
 
         // 检查当前股价是否触达MA60并添加提醒
-        checkForAlerts(stock['current'], stock['ma60_30'], stock['ma60_60'], stock['ma60_120'], symbol);
+        checkForAlerts(stock['current'], stock['ma10'], stock['ma20'], stock['ma60'], symbol);
         // 检查提醒价
         checkAlertPrice(stock['current'], symbol);
     }
 }
 
 // 检查是否触达MA60并添加提醒
-function checkForAlerts(currentPrice, ma60_30, ma60_60, ma60_120, symbol) {
+function checkForAlerts(currentPrice, ma10, ma20, ma60, symbol) {
     if (currentPrice !== undefined) {
-        // 检查30分钟MA60
-        if (ma60_30 !== undefined && (currentPrice >= ma60_30 * 0.99 && currentPrice <= ma60_30 * 1.01)) {
-            alert(`股票 ${symbol} 的股价触达30分钟MA60: ${ma60_30}`); // 提醒用户
+        // 检查10日均线
+        if (ma10 !== undefined && (currentPrice >= ma10 * 0.99 && currentPrice <= ma10 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达10日均线: ${ma10}`); // 提醒用户
         }
-        // 检查60分钟MA60
-        if (ma60_60 !== undefined && (currentPrice >= ma60_60 * 0.99 && currentPrice <= ma60_60 * 1.01)) {
-            alert(`股票 ${symbol} 的股价触达60分钟MA60: ${ma60_60}`); // 提醒用户
+        // 检查20日均线
+        if (ma20 !== undefined && (currentPrice >= ma20 * 0.99 && currentPrice <= ma20 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达20日均线: ${ma20}`); // 提醒用户
         }
-        // 检查120分钟MA60
-        if (ma60_120 !== undefined && (currentPrice >= ma60_120 * 0.99 && currentPrice <= ma60_120 * 1.01)) {
-            alert(`股票 ${symbol} 的股价触达120分钟MA60: ${ma60_120}`); // 提醒用户
+        // 检查60日均线
+        if (ma60 !== undefined && (currentPrice >= ma60 * 0.99 && currentPrice <= ma60 * 1.01)) {
+            alert(`股票 ${symbol} 的股价触达60日均线: ${ma60}`); // 提醒用户
         }
     }
 }
@@ -172,9 +172,10 @@ function getStockData(needCreate, symbols) {
         });
 }
 
-function getCloseValues(symbol, scales, ma, datalen) {
+function getCloseValues(symbol, scales) {
     const promises = scales.map(scale => {
-        const url = `https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=${scale}&ma=${ma}&datalen=${datalen}`;
+        const url = `https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${symbol}&scale=240&ma=${scale}&datalen=240`;
+        console.log(`请求URL: ${url}`); // 添加URL调试信息
         return fetch(url)
             .then(response => {
                 if (!response.ok) {
@@ -183,7 +184,28 @@ function getCloseValues(symbol, scales, ma, datalen) {
                 return response.json();
             })
             .then(klineData => {
-                return klineData.map(item => parseFloat(item.close));
+                console.log(`获取${symbol}的${scale}日数据:`, klineData.length, '条记录');
+                if (klineData && klineData.length > 0) {
+                    // 在交易时段剔除当日K线，避免与券商口径差异
+                    try {
+                        const today = new Date();
+                        const yyyy = today.getFullYear();
+                        const mm = String(today.getMonth() + 1).padStart(2, '0');
+                        const dd = String(today.getDate()).padStart(2, '0');
+                        const todayStr = `${yyyy}-${mm}-${dd}`;
+                        const lastIdx = klineData.length - 1;
+                        if (klineData[lastIdx] && klineData[lastIdx].day === todayStr && isMarketOpen()) {
+                            klineData = klineData.slice(0, -1);
+                        }
+                    } catch (e) {
+                        console.warn('处理当日K线时出错:', e);
+                    }
+                    // 获取收盘价数据
+                    const closePrices = klineData.map(item => parseFloat(item.close));
+                    console.log(`收盘价数据:`, closePrices);
+                    return closePrices;
+                }
+                return [];
             })
             .catch(error => {
                 console.error(`请求失败（scale=${scale}）:`, error);
@@ -195,37 +217,41 @@ function getCloseValues(symbol, scales, ma, datalen) {
 }
 
 function calculateMA60(closeValuesList) {
-    const ma60List = closeValuesList.map(closeValues => {
-        if (closeValues.length < 60) {
-            console.log("数据不足以计算 MA60");
+    const scales = [10, 20, 60];
+    return closeValuesList.map((closeValues, index) => {
+        const scale = scales[index];
+        if (closeValues.length < scale) {
+            console.log(`数据不足以计算 ${scale}日均线，需要${scale}条数据，实际只有${closeValues.length}条`);
             return null;
         }
-        const sum = closeValues.reduce((acc, val) => acc + val, 0);
-        const ma60 = sum / 60;
-        return Math.round(ma60 * 100) / 100; // 保留两位小数
+        // 取最近scale天的收盘价计算均线
+        const recentPrices = closeValues.slice(-scale);
+        const sum = recentPrices.reduce((acc, val) => acc + val, 0);
+        const maValue = sum / scale;
+        console.log(`${scale}日均线计算:`, recentPrices, `平均值:`, maValue.toFixed(2));
+        return Math.round(maValue * 100) / 100; // 保留两位小数
     });
-    return ma60List;
 }
 
 function calculateAndUpdateMA60(symbol) {
-    const scales = [30, 60, 120];
-    const ma = 60; // 修改接口参数
-    const datalen = 60; // 修改接口参数
+    const scales = [10, 20, 60];
 
-    getCloseValues(symbol, scales, ma, datalen)
+    getCloseValues(symbol, scales)
         .then(closeValuesList => {
-            const ma60List = calculateMA60(closeValuesList);
-            updateMA60InTable(symbol, ma60List);
+            const maList = calculateMA60(closeValuesList);
+            updateMA60InTable(symbol, maList);
         });
 }
 
 // 更新表格中的MA60值（优化后）
 function updateMA60InTable(symbol, ma60List) {
-    const scales = [30, 60, 120];
+    const scales = [10, 20, 60];
+    console.log(`更新${symbol}的均线数据:`, ma60List); // 添加调试信息
     ma60List.forEach((ma60, index) => {
         if (ma60 !== null) {
             const scale = scales[index];
-            const tdMA60 = document.getElementById(`${symbol}ma60_${scale}`);
+            const tdMA60 = document.getElementById(`${symbol}ma${scale}`);
+            console.log(`查找元素ID: ${symbol}ma${scale}, 找到元素:`, tdMA60); // 添加调试信息
             if (tdMA60) {
                 const currentValue = parseFloat(tdMA60.innerHTML) || null;
                 const newValue = parseFloat(ma60.toFixed(2));
@@ -233,7 +259,10 @@ function updateMA60InTable(symbol, ma60List) {
                 // 只有当新值与当前值不同时才更新
                 if (currentValue === null || newValue !== currentValue) {
                     tdMA60.innerHTML = newValue.toFixed(2);
+                    console.log(`更新${symbol}的${scale}日均线为:`, newValue.toFixed(2)); // 添加调试信息
                 }
+            } else {
+                console.log(`未找到元素: ${symbol}ma${scale}`); // 添加调试信息
             }
         }
     });
@@ -293,11 +322,18 @@ input.addEventListener('keydown', (e) => {
                 let code = codes[index];
                 names.splice(index, 1);
                 codes.splice(index, 1);
-                let table = document.getElementById('table');
-                table.removeChild(table.childNodes[index + 2]);
+                
+                // 通过股票代码查找并删除对应的表格行
+                let targetRow = document.querySelector(`#table tr td[id^="${code}"]`);
+                if (targetRow) {
+                    targetRow.parentNode.remove();
+                }
+                
                 // 移除相关localStorage
                 localStorage.removeItem(code + '_alert_price');
                 localStorage.removeItem(code + '_alerted');
+                localStorage.removeItem(code + '_held'); // 清理持仓标记
+                
                 getStockData(false, codes.join(','));
             }
         } else if (keys[0] == 'clear') {
@@ -366,24 +402,24 @@ function createStockTr(stock) {
     tdPercent.className = 'tdCenter';
 
     // 创建MA60单元格
-    let tdMA60_30 = document.createElement('td');
-    tdMA60_30.setAttribute('id', symbol + 'ma60_30');
-    tdMA60_30.className = 'tdEnd col-30';
+    let tdMA10 = document.createElement('td');
+    tdMA10.setAttribute('id', symbol + 'ma10');
+    tdMA10.className = 'tdEnd col-10';
 
-    let tdMA60_60 = document.createElement('td');
-    tdMA60_60.setAttribute('id', symbol + 'ma60_60');
-    tdMA60_60.className = 'tdEnd col-60';
+    let tdMA20 = document.createElement('td');
+    tdMA20.setAttribute('id', symbol + 'ma20');
+    tdMA20.className = 'tdEnd col-20';
 
-    let tdMA60_120 = document.createElement('td');
-    tdMA60_120.setAttribute('id', symbol + 'ma60_120');
-    tdMA60_120.className = 'tdEnd col-120';
+    let tdMA60 = document.createElement('td');
+    tdMA60.setAttribute('id', symbol + 'ma60');
+    tdMA60.className = 'tdEnd col-60';
 
     tr.appendChild(tdSymbol);
     tr.appendChild(tdCurrent);
     tr.appendChild(tdPercent);
-    tr.appendChild(tdMA60_30); // 添加MA60_30单元格
-    tr.appendChild(tdMA60_60);  // 添加MA60_60单元格
-    tr.appendChild(tdMA60_120); // 添加MA60_120单元格
+    tr.appendChild(tdMA10); // 添加MA10单元格
+    tr.appendChild(tdMA20);  // 添加MA20单元格
+    tr.appendChild(tdMA60); // 添加MA60单元格
 
     document.getElementById('table').appendChild(tr);
     return tr;
